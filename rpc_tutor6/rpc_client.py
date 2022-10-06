@@ -49,3 +49,7 @@ fibonacci_rpc = FibonacciRpcClient()
 print(" [x] Requesting fib(30)")
 response = fibonacci_rpc.call(30)
 print(f" [.] Got {response}")
+
+print(" [x] Requesting fib(20)")
+response = fibonacci_rpc.call(20)
+print(f" [.] Got {response}")
