@@ -99,7 +99,7 @@ It is also possible to bind multiple queues with the same binding key, like so:
 
 <img src="./notes_assets/direct-exchange-multiple.png">
 
-3. topic exchange (tutorial 5)
+3. **topic exchange** (tutorial 5)
 
 Topic exchanges are quite similar to direct exchanges, in that they also forward messages to queues based on a routing key. However, the routing key for a topic exchange must have a specific format - a list of words, separated by dots. Additionally, there are two special cases for binding keys. `*` can substitute for exactly one word and `#` can substitute for zero or more words. Example:
 
@@ -107,7 +107,7 @@ Topic exchanges are quite similar to direct exchanges, in that they also forward
 
 In the example above, a message with a routing_key of `quick.orange.rabbit` would go to both Q1 and Q2. `lazy.brown.rabbit` would be sent to Q2 only, and only once, despite matching both bindings.  
 
-4. header exchange
+4. **header exchange**
 
 In a header exchange, the messages are forwarded to queues based on headers, rather than routing keys. This is similar to a topic exchange, but rather than being restricted to a string routing key, we match based on headers, which have a format of `Dict[str, any]`. Additionally, when we create the queue binding, we can specify whether the values of all headers need to match, or if matching any headers is sufficient (using the `x-match` arguemnt). Code example is included below, because the header exchange is not used in any of the RabbitMQ tutorials.
 ```
@@ -128,7 +128,7 @@ bind_args = {
 channel.queue_bind("my_queue", "my_header_exchange", arguments=bind_args)
 ```
 
-5. default exchange (tutorial 1)
+5. **default exchange** (tutorial 1)
 
 If we don't specify an exchange, then the default exchange is used. Any queue that is declared is automatically bound to the default exchange, and will receive messages from it if the routing_key of the message matches the name of the queue.
 
@@ -157,7 +157,26 @@ def callback(ch, method, properties, body):
     ch.basic_ack(delivery_tag = method.delivery_tag)
 ```
 
-In this example, the consumer sends an ack(nowledgement) to RabbitMQ, notifying it that it has fully processed the task, and that RabbitMQ can delete the message. If the worker dies part way through completing the task, the message is not akcnowledged, so RabbitMQ will requeue it and deliver it to another consumer.
+In this example, the consumer sends an ack(nowledgement) to RabbitMQ, notifying it that it has fully processed the task, and that RabbitMQ can delete the message. If the worker dies part way through completing the task, the message is not acknowledged, so RabbitMQ will requeue it and deliver it to another consumer.
+
+The other possibility is to use auto acknowledgements. In this case, RabbitMQ considers the message delivered as soon as it is sent. However, the message could be lost, if the consumer's TCP connection or channel is closed before successful delivery. This mode is often refereed to as "fire-and-forget". It offers higher throughput in exhcange for reduced safety of delivery and consumer processing. Another disadvantage of auto-ack is that it could lead to consumer overload - the consumer could accumulate a larg backlog of messages in memory, and run out, or get terminated by the OS.
+
+### Publisher confirms
+
+While confirmations by consumers are called acknowledgements, confirmations by brokers to publishers are called *publisher confirms*. The broker will then send either a basick ack or a basic nack in case of failure. In pika, an Exception is raised if a basic nack is received when publisher confirms are enabled using the confirm_delivery() method.
+
+```
+channel.confirm_delivery()
+try:
+    channel.basic_publish(
+        exchange=exchange,
+        routing_key=key,
+        body=message,
+        properties=properties
+    )
+except (pika.exceptions.UnroutableError, pika.exceptions.NackError):
+    print('Message could not be confirmed')
+```
 
 ### Message durability
 
@@ -176,4 +195,31 @@ channel.basic_publish(exchange='',
 
 This does not guarantee 100% that all messages won't be lost, since there is some time between receiving the message and writing it to the disk.
 
-### RPCs
+### Request/reply pattern 
+
+So far, we've only covered the sending of messages/tasks one way, without getting any response to our messages. However, it is also possible to implement a request/reply pattern using RabbitMQ. One example of use is for RPCs (remote procedure calls). We can call a function 
+
+TODO
+
+### Queue types
+
+Lazy queues, quorum queues etc..
+
+# AMQP
+
+AMQP (Advanced Message Queuing Protocol) is an application level protocol (like for example HTTP) that was originally developed by/for financial institutions, since they need to send a lot of messages, and don't want to lose any of them. AMQP typically runs on top of TCP/IP.
+
+## Connections
+<img src="./notes_assets/channel-in-connection.jpg">
+
+As mentioned above, AMQP typically runs on top of TCP/IP, and so the connection between an application and the broker/server (such as RabbitMQ) is a TCP connection. RabbitMQ supports multiplexing, so multiple data streams, or "lightweight connections" can be opened on a single TCP connection. In RabbitMQ these lightweight connections are called **channels**. Every AMQP protocol-reated operation occurs over a channel. 
+
+It is recommended to open few long-lived connections to RabbitMQ, since TCP connections can be a drain on resources, and also take a relatively long time to establish, as the handshake process for AMQP is quite complex. Instead open more channels, which are lightweight compared to connections. Furthermore, channels should not be shared between threads. It is also recommended that producers and consumers each open their own connections (with multiple channels).
+
+## Links
+- [RabbitMQ in depth](https://livebook.manning.com/book/rabbitmq-in-depth/chapter-1/v-13/20) - book, with thorough explanations on RabbitMQ, AMQP and so on
+- [cloudamqp.com](https://www.cloudamqp.com/) has a series of blogs on specific topics relating to RabbitMQ and AMQP. Not as in-depth as the book above, but a good higher level source nonetheless.
+    - [What is AMQP and why is it used in RabbitMQ](https://www.cloudamqp.com/blog/what-is-amqp-and-why-is-it-used-in-rabbitmq.html)
+    - [13 Common RabbitMQ Mistakes and How to Avoid Them](https://www.cloudamqp.com/blog/part4-rabbitmq-13-common-errors.html)
+    - [FAQ: What is the relationship between connections and channels in RabbitMQ?](https://www.cloudamqp.com/blog/the-relationship-between-connections-and-channels-in-rabbitmq.html)
+    - [What is AMQP and why is it used in RabbitMQ](https://www.cloudamqp.com/blog/what-is-amqp-and-why-is-it-used-in-rabbitmq.html)
